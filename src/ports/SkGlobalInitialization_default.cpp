@@ -120,6 +120,7 @@
         SkRegisterCropImageFilterFlattenable();
         SkRegisterDisplacementMapImageFilterFlattenable();
         SkRegisterImageImageFilterFlattenable();
+        SkRegisterKawaseBlurImageFilterFlattenable();
         SkRegisterLightingImageFilterFlattenables();
         SkRegisterMagnifierImageFilterFlattenable();
         SkRegisterMatrixConvolutionImageFilterFlattenable();

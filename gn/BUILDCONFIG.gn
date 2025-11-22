@@ -159,12 +159,7 @@ if (target_os == "win") {
                                   "trim string")
   }
   if (clang_win != "" && clang_win_version == "") {
-    clang_win_version = exec_script("//gn/highest_version_dir.py",
-                                    [
-                                      "$clang_win/lib/clang",
-                                      "[0-9]+\.[0-9]+\.[0-9]+",
-                                    ],
-                                    "trim string")
+    clang_win_version = "21"
   }
 }
 

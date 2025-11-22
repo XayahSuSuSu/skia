@@ -20,6 +20,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPicture.h"  // IWYU pragma: keep
 #include "include/core/SkShader.h"
+#include "include/core/SkSurface.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "src/core/SkBitmapDevice.h"
@@ -1454,6 +1455,89 @@ FilterResult FilterResult::Builder::blur(const LayerSpace<SkSize>& sigma) {
     // TODO: Allow the blur functor to provide an upscaling transform that is applied to the
     // FilterResult so that a render pass can possibly be elided if this is the final operation.
     return {image, outputBounds.topLeft()};
+}
+
+FilterResult FilterResult::Builder::kawaseBlur(const SkScalar blurRadius) {
+    SkASSERT(fInputs.size() == 1);
+
+    auto input = fInputs[0].fImage.image();
+
+    if (blurRadius <= 0.f) {
+        return fInputs[0].fImage;
+    }
+
+    const auto blurRect = this->outputBounds({});
+    if (blurRect.isEmpty()) {
+        return {};
+    }
+
+    float kInputScale = 0.25f;
+    float kInverseInputScale = 1.0f / kInputScale;
+    uint32_t kMaxPasses = 4;
+    float kMaxCrossFadeRadius = 30.0f;
+
+    // Kawase is an approximation of Gaussian, but it behaves differently from it.
+    // A radius transformation is required for approximating them, and also to introduce
+    // non-integer steps, necessary to smoothly interpolate large radii.
+    float tmpRadius = (float)blurRadius / 2.0f;
+    uint32_t numberOfPasses = std::min(kMaxPasses, (uint32_t)ceil(tmpRadius));
+    float radiusByPasses = tmpRadius / (float)numberOfPasses;
+
+    // Create blur surface with the bit depth and colorspace of the original surface
+    SkImageInfo scaledInfo = SkImageInfo::MakeN32Premul((float)blurRect.width() * kInputScale,
+                                                        (float)blurRect.height() * kInputScale);
+    skif::LayerSpace<SkIRect> scaledBounds{scaledInfo.bounds()};
+
+    // For sampling Skia's API expects the inverse of what logically seems appropriate. In this
+    // case you might expect Translate(blurRect.fLeft, blurRect.fTop) X Scale(kInverseInputScale)
+    // but instead we must do the inverse.
+    SkMatrix downsamplingMatrix = SkMatrix::Translate(-blurRect.left(), -blurRect.top());
+    downsamplingMatrix.postScale(kInputScale, kInputScale);
+    SkMatrix blurMatrix = SkMatrix::I();
+
+    // Start by downscaling and doing the first blur pass
+    SkSamplingOptions linear(SkFilterMode::kLinear, SkMipmapMode::kNone);
+
+    const SkRuntimeEffect* mBlurEffect =
+            SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
+                                "uniform shader child;"
+                                "uniform float in_blurOffset;"
+
+                                "half4 main(float2 xy) {"
+                                "half4 c = child.eval(xy);"
+                                "c += child.eval(xy + float2(+in_blurOffset, +in_blurOffset));"
+                                "c += child.eval(xy + float2(+in_blurOffset, -in_blurOffset));"
+                                "c += child.eval(xy + float2(-in_blurOffset, -in_blurOffset));"
+                                "c += child.eval(xy + float2(-in_blurOffset, +in_blurOffset));"
+                                "return half4(c.rgb * 0.2, 1.0);"
+                                "}");
+    SkRuntimeShaderBuilder blurBuilder(sk_ref_sp(mBlurEffect));
+
+    blurBuilder.child("child") = input->asShader(SkTileMode::kClamp, linear, downsamplingMatrix);
+    blurBuilder.uniform("in_blurOffset") = radiusByPasses * kInputScale;
+
+    sk_sp<SkShader> shader = blurBuilder.makeShader();
+    auto tmpBlur = this->drawShader(shader, scaledBounds, false);
+
+    // And now we'll build our chain of scaled blur stages. If there is more than one pass,
+    // create a second surface and ping pong between them.
+    if (numberOfPasses <= 1) {
+    } else {
+        for (auto i = 1; i < numberOfPasses; i++) {
+            blurBuilder.child("child") =
+                    tmpBlur.image()->asShader(SkTileMode::kClamp, linear, blurMatrix);
+            blurBuilder.uniform("in_blurOffset") = (float)i * radiusByPasses * kInputScale;
+            sk_sp<SkShader> shader = blurBuilder.makeShader(nullptr);
+            tmpBlur = this->drawShader(shader, scaledBounds, false);
+        }
+    }
+
+    // Upsamping using linear filter mode
+    SkMatrix upsampingMatrix = SkMatrix::Translate(blurRect.left(), blurRect.top());
+    upsampingMatrix.postScale(kInverseInputScale, kInverseInputScale);
+    tmpBlur = tmpBlur.applyTransform(fContext, skif::LayerSpace<SkMatrix>(upsampingMatrix), linear);
+
+    return tmpBlur;
 }
 
 } // end namespace skif

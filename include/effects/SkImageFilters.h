@@ -253,6 +253,20 @@ public:
     }
 
     /**
+     *  Create a filter that applies a Kawase blur effect to the input.
+     *  Kawase blur is an approximation of Gaussian blur that uses multiple passes
+     *  with downsampling for better performance. It's particularly efficient for
+     *  large blur radii.
+     *
+     *  @param blurRadius The blur radius in pixels. Must be >= 0.
+     *  @param input      The input filter to blur. If null, uses the dynamic source image.
+     *  @param cropRect   Optional rectangle to crop input and output.
+     */
+    static sk_sp<SkImageFilter> KawaseBlur(SkScalar blurRadius,
+                                           sk_sp<SkImageFilter> input = nullptr,
+                                           const CropRect& cropRect = {});
+
+    /**
      *  Create a filter that fills 'lensBounds' with a magnification of the input.
      *
      *  @param lensBounds The outer bounds of the magnifier effect

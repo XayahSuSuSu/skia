@@ -933,6 +933,8 @@ public:
     // Builder's Context.
     FilterResult blur(const LayerSpace<SkSize>& sigma);
 
+    FilterResult kawaseBlur(const SkScalar radius);
+
     // Combine all added inputs by transforming them into equivalent SkShaders and invoking the
     // shader factory that binds them together into a single shader that fills the output surface.
     //
