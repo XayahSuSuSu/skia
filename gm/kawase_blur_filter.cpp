@@ -12,8 +12,8 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
-#include "include/effects/SkRuntimeEffect.h"
 #include "include/effects/SkImageFilters.h"
+#include "include/effects/SkRuntimeEffect.h"
 
 #include "tools/Resources.h"
 
@@ -23,23 +23,15 @@ public:
     SkString getName() const override { return SkString("newgmtest"); }
     SkISize getISize() override { return {300, 300}; }
 
-    void onOnceBeforeDraw() override {
-        fMandrill = GetResourceAsImage("images/mandrill_256.png");
-    }
+    void onOnceBeforeDraw() override { fMandrill = GetResourceAsImage("images/desktop.jpg"); }
 
     void onDraw(SkCanvas* canvas) override {
         float sigma = 80.0f;
-        sk_sp<SkImageFilter> blurFilter = SkImageFilters::Blur(
-                sigma, sigma,
-                SkTileMode::kClamp,
-                nullptr
-        );
-        sk_sp<SkImageFilter> imageFilter = SkImageFilters::KawaseBlur(
-                50.0f,
-                nullptr
-        );
+        sk_sp<SkImageFilter> blurFilter =
+                SkImageFilters::Blur(sigma, sigma, SkTileMode::kClamp, nullptr);
+        sk_sp<SkImageFilter> imageFilter = SkImageFilters::KawaseBlur(80.0f, nullptr);
         SkPaint blurPaint;
-        blurPaint.setImageFilter(imageFilter);
+        blurPaint.setImageFilter(blurFilter);
         canvas->drawImage(fMandrill, 0, 0, SkSamplingOptions(), &blurPaint);
     }
 
